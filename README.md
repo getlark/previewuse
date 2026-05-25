@@ -15,11 +15,13 @@ Caddy on the instance terminates TLS for each host using Let's Encrypt, so you g
 
 ## Quickstart
 
+From the root of your existing repo:
+
 ```bash
-# 1. Copy the scripts and examples in
-git clone https://github.com/getlark/previewuse.git
-cd previewuse/
+curl -fsSL https://raw.githubusercontent.com/getlark/previewuse/main/install.sh | bash
 ```
+
+This drops the scripts, compose file, example configs, and the `configure-preview-deploy` Claude Code skill into the current directory (prompting before overwriting). Pass `--dry-run` to preview, `--yes` to overwrite without prompting, or `--ref <tag>` to pin a version.
 
 Then use your coding agent to run `/configure-preview-deploy` instead of editing by hand — the skill walks through the config and reuses signals from your repo (compose services, env vars, etc).
 
