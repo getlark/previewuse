@@ -67,6 +67,7 @@ FILES=(
   "circleci.example.yml"
   "github-actions.example.yml"
   ".claude/skills/configure-preview-deploy/SKILL.md"
+  ".claude/skills/provision-preview-aws/SKILL.md"
 )
 
 EXECUTABLE=(
@@ -210,8 +211,10 @@ echo "Done. installed=$installed skipped=$skipped"
 echo
 echo "Next:"
 echo "  Open your coding agent (Claude Code, Cursor, etc.) in this repo and run:"
-echo "      /configure-preview-deploy"
-echo "  The skill walks through preview.config.sh, Caddyfile, docker-compose.preview.yml,"
-echo "  and the CI workflow using signals from your repo."
+echo "      /configure-preview-deploy   # fills in config + CI workflow"
+echo "      /provision-preview-aws      # creates the AWS resources + CI secrets"
+echo "  Run them in that order. The configure skill walks through preview.config.sh,"
+echo "  Caddyfile, docker-compose.preview.yml, and CI; the provision skill creates"
+echo "  the S3 bucket, IAM roles, OIDC provider, and pushes secrets via gh."
 echo
 echo "  Prefer to edit by hand? See README.md — start by renaming the .example files."

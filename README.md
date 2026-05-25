@@ -23,9 +23,12 @@ curl -fsSL https://raw.githubusercontent.com/getlark/previewuse/main/install.sh 
 
 This drops the scripts, compose file, example configs, and the `configure-preview-deploy` Claude Code skill into the current directory (prompting before overwriting). By default the installer fetches the [latest release](https://github.com/getlark/previewuse/releases) — pass `--ref <tag>` to pin a specific version (e.g. `--ref 0.1.0`), `--ref main` to track the development branch, `--dry-run` to preview, or `--yes` to overwrite without prompting.
 
-Then use your coding agent to run `/configure-preview-deploy` instead of editing by hand — the skill walks through the config and reuses signals from your repo (compose services, env vars, etc).
+Then use your coding agent to run the two shipped skills, in order:
 
-Then wire it into CI — see [`circleci.example.yml`](circleci.example.yml) or [`github-actions.example.yml`](github-actions.example.yml).
+- `/configure-preview-deploy` walks through `preview.config.sh`, `Caddyfile`, `docker-compose.preview.yml`, and the CI workflow using signals from your repo (compose services, env vars, etc).
+- `/provision-preview-aws` creates the AWS resources listed in [AWS prerequisites](#aws-prerequisites) — S3 bucket, EC2 key pair, security group, IAM roles, OIDC provider — and pushes the CI secrets via `gh secret set`. Confirms each action before running it.
+
+You can stop after `/configure-preview-deploy` and provision AWS by hand from the [AWS prerequisites](#aws-prerequisites) section below if you prefer.
 
 If you prefer to edit it by hand:
 

@@ -95,7 +95,13 @@ Make sure the CI workflow forwards every variable in `PREVIEW_FORWARD_ENV` from 
 
 A short file listing the AWS prerequisites the user still has to do by hand. Use the AWS prerequisites section of previewuse's README verbatim, plus a checklist of CI secrets they need to add. Don't fabricate AWS CLI commands — link to the README section instead.
 
-### 9. Smoke test
+### 9. Offer to provision AWS
+
+The punch list isn't the end of the road — there's a companion skill, [[provision-preview-aws]], that walks through the AWS resources and CI secrets one by one (S3 bucket, IAM roles, OIDC provider, GitHub secrets via `gh`). Don't just mention it in passing — explicitly ask the user whether to run it now, or whether they'd prefer to do AWS setup by hand.
+
+Surface this even when `PREVIEW_SETUP.md` looks long — running the provisioning skill is usually the faster path, and it's safer than copy-pasting AWS CLI commands out of the README.
+
+### 10. Smoke test
 
 Suggest the user push a branch and watch CI. Note: the first deploy is slow (Docker install + image build); subsequent deploys to the same slug reuse the instance.
 
