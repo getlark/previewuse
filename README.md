@@ -21,7 +21,7 @@ From the root of your existing repo:
 curl -fsSL https://raw.githubusercontent.com/getlark/previewuse/main/install.sh | bash
 ```
 
-This drops the scripts, compose file, example configs, and the `configure-preview-deploy` Claude Code skill into the current directory (prompting before overwriting). Pass `--dry-run` to preview, `--yes` to overwrite without prompting, or `--ref <tag>` to pin a version.
+This drops the scripts, compose file, example configs, and the `configure-preview-deploy` Claude Code skill into the current directory (prompting before overwriting). By default the installer fetches the [latest release](https://github.com/getlark/previewuse/releases) — pass `--ref <tag>` to pin a specific version (e.g. `--ref 0.1.0`), `--ref main` to track the development branch, `--dry-run` to preview, or `--yes` to overwrite without prompting.
 
 Then use your coding agent to run `/configure-preview-deploy` instead of editing by hand — the skill walks through the config and reuses signals from your repo (compose services, env vars, etc).
 

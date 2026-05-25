@@ -12,7 +12,7 @@
 # Flags:
 #   --dry-run        Print actions without writing anything.
 #   --yes, -y        Overwrite existing files without prompting.
-#   --ref REF        Git ref (branch/tag/sha) to download from. Default: main.
+#   --ref REF        Git ref (branch/tag/sha) to download from. Default: latest release.
 #   --repo O/R       GitHub repo to download from. Default: getlark/previewuse.
 #   --from DIR       Copy from a local previewuse checkout instead of GitHub.
 #   TARGET_DIR       Directory to install into. Default: current directory.
@@ -21,7 +21,7 @@ set -euo pipefail
 
 DRY_RUN=0
 ASSUME_YES=0
-REF="main"
+REF=""
 REPO="getlark/previewuse"
 FROM=""
 TARGET="."
@@ -75,16 +75,36 @@ EXECUTABLE=(
   "scripts/user-data.sh"
 )
 
+# Symlinks to create at the target, as "link_path::target". Target is
+# resolved relative to the link's parent directory (same semantics as ln -s).
+SYMLINKS=(
+  ".agents/skills::../.claude/skills"
+)
+
 if [[ ! -d "$TARGET" ]]; then
   echo "target directory does not exist: $TARGET" >&2
   exit 1
 fi
 TARGET="$(cd "$TARGET" && pwd)"
 
+resolve_latest_release() {
+  local api="https://api.github.com/repos/$REPO/releases/latest"
+  local tag
+  tag="$(curl -fsSL "$api" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)"
+  if [[ -z "$tag" ]]; then
+    echo "could not resolve latest release for $REPO (set --ref to override)" >&2
+    return 1
+  fi
+  echo "$tag"
+}
+
 if [[ -n "$FROM" ]]; then
   FROM="$(cd "$FROM" && pwd)"
   echo "Source: $FROM (local)"
 else
+  if [[ -z "$REF" ]]; then
+    REF="$(resolve_latest_release)"
+  fi
   echo "Source: https://github.com/$REPO @ $REF"
 fi
 echo "Target: $TARGET"
@@ -150,11 +170,48 @@ for rel in "${FILES[@]}"; do
   installed=$((installed + 1))
 done
 
+for entry in "${SYMLINKS[@]}"; do
+  link_rel="${entry%%::*}"
+  link_target="${entry##*::}"
+  link_path="$TARGET/$link_rel"
+  action="symlink"
+  if [[ -L "$link_path" || -e "$link_path" ]]; then
+    existing=""
+    [[ -L "$link_path" ]] && existing="$(readlink "$link_path")"
+    if [[ "$existing" == "$link_target" ]]; then
+      echo "  skip   $link_rel (symlink already correct)"
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if confirm_overwrite "$link_path"; then
+      action="resymlink"
+    else
+      echo "  skip   $link_rel"
+      skipped=$((skipped + 1))
+      continue
+    fi
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "  $action $link_rel -> $link_target"
+    installed=$((installed + 1))
+    continue
+  fi
+
+  mkdir -p "$(dirname "$link_path")"
+  rm -f "$link_path"
+  ln -s "$link_target" "$link_path"
+  echo "  $action $link_rel -> $link_target"
+  installed=$((installed + 1))
+done
+
 echo
 echo "Done. installed=$installed skipped=$skipped"
 echo
 echo "Next:"
-echo "  1. mv preview.config.example.sh preview.config.sh (or run /configure-preview-deploy)"
-echo "  2. mv Caddyfile.example Caddyfile"
-echo "  3. Edit preview.config.sh, docker-compose.preview.yml, and Caddyfile for your app."
-echo "  4. Wire CI — see circleci.example.yml or github-actions.example.yml."
+echo "  Open your coding agent (Claude Code, Cursor, etc.) in this repo and run:"
+echo "      /configure-preview-deploy"
+echo "  The skill walks through preview.config.sh, Caddyfile, docker-compose.preview.yml,"
+echo "  and the CI workflow using signals from your repo."
+echo
+echo "  Prefer to edit by hand? See README.md — start by renaming the .example files."
