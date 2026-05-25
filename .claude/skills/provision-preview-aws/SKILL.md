@@ -128,10 +128,18 @@ Check both:
 - `aws iam get-role --role-name "${PREVIEW_IAM_PROFILE:-preview}"`
 - `aws iam get-instance-profile --instance-profile-name "${PREVIEW_IAM_PROFILE:-preview}"`
 
-If missing, write the trust + policy JSON to a temp dir (use `mktemp -d`, not the repo), then:
+If missing, render the trust + policy from the templates next to this skill into `$TMP` (use `mktemp -d`, not the repo). The templates live at `.claude/skills/provision-preview-aws/templates/` (resolve the directory of this `SKILL.md`; do **not** copy JSON out of the README or write it from memory).
 
 ```bash
+SKILL_DIR="$(dirname "$(realpath .claude/skills/provision-preview-aws/SKILL.md)")"
+TMPL="$SKILL_DIR/templates"
+TMP="$(mktemp -d)"
 ROLE="${PREVIEW_IAM_PROFILE:-preview}"
+
+cp "$TMPL/preview-instance-trust.json" "$TMP/preview-instance-trust.json"
+sed "s|__BUCKET__|${PREVIEW_S3_BUCKET}|g" \
+  "$TMPL/preview-instance-policy.json" > "$TMP/preview-instance-policy.json"
+
 aws iam create-role --role-name "$ROLE" \
   --assume-role-policy-document file://"$TMP/preview-instance-trust.json"
 aws iam put-role-policy --role-name "$ROLE" --policy-name preview-s3-read \
@@ -140,7 +148,7 @@ aws iam create-instance-profile --instance-profile-name "$ROLE"
 aws iam add-role-to-instance-profile --instance-profile-name "$ROLE" --role-name "$ROLE"
 ```
 
-The S3 policy must scope to `arn:aws:s3:::$PREVIEW_S3_BUCKET/preview/*` — substitute the bucket name, don't leave the README's placeholder.
+Verify substitution before each `put-role-policy` / `create-role` — `grep __ "$TMP/*.json"` should return nothing. If any `__PLACEHOLDER__` survives, halt; don't ship a literal placeholder to IAM.
 
 ### 7. CI role (OIDC)
 
@@ -162,22 +170,38 @@ aws iam create-open-id-connect-provider \
   --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
 ```
 
-**CI role:** ask the user for the GitHub `org/repo` (default to `gh repo view --json nameWithOwner -q .nameWithOwner`). Write `previewuse-ci-trust.json` and `previewuse-ci-policy.json` to a temp dir, substituting account ID (`aws sts get-caller-identity --query Account --output text`), bucket name, and hosted zone ID from step 2. Use the policy from `README.md` verbatim apart from those substitutions.
-
-Tighten the `sub` condition to `repo:<org>/<repo>:*` initially; mention they can tighten further to `:pull_request` later.
+**CI role:** ask the user for the GitHub `org/repo` (default to `gh repo view --json nameWithOwner -q .nameWithOwner`). Render the trust + policy from the templates in `$TMPL` — do **not** write the JSON from memory or copy it out of the README. The CI policy is what governs whether `deploy.sh` works; any drift here (e.g. dropping `ec2:DescribeInstanceTypeOfferings`) shows up as a runtime IAM denial.
 
 ```bash
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
+
+sed -e "s|__ACCOUNT_ID__|${ACCOUNT_ID}|g" \
+    -e "s|__REPO__|${REPO}|g" \
+  "$TMPL/previewuse-ci-trust-github.json" > "$TMP/previewuse-ci-trust.json"
+
+sed -e "s|__ACCOUNT_ID__|${ACCOUNT_ID}|g" \
+    -e "s|__AWS_REGION__|${AWS_REGION}|g" \
+    -e "s|__PREVIEW_IAM_PROFILE__|${PREVIEW_IAM_PROFILE:-preview}|g" \
+    -e "s|__BUCKET__|${PREVIEW_S3_BUCKET}|g" \
+    -e "s|__HOSTED_ZONE_ID__|${HOSTED_ZONE_ID}|g" \
+  "$TMPL/previewuse-ci-policy.json" > "$TMP/previewuse-ci-policy.json"
+
+grep -l '__' "$TMP"/previewuse-ci-*.json && { echo "unsubstituted placeholders"; exit 1; }
+
 aws iam create-role --role-name previewuse-ci \
   --assume-role-policy-document file://"$TMP/previewuse-ci-trust.json"
 aws iam put-role-policy --role-name previewuse-ci --policy-name previewuse \
   --policy-document file://"$TMP/previewuse-ci-policy.json"
 ```
 
-If `previewuse-ci` already exists, diff the existing trust + policy against the new ones (`aws iam get-role` / `aws iam get-role-policy`). If they differ, surface the diff and ask before `update-assume-role-policy` / `put-role-policy`. Don't replace silently.
+Tighten the `sub` condition to `repo:<org>/<repo>:*` initially (the template default); mention they can tighten further to `:pull_request` later.
+
+If `previewuse-ci` already exists, diff the existing trust + policy against the rendered ones (`aws iam get-role` / `aws iam get-role-policy`). If they differ, surface the diff and ask before `update-assume-role-policy` / `put-role-policy`. Don't replace silently.
 
 Capture the role ARN: `arn:aws:iam::<account>:role/previewuse-ci`.
 
-**CircleCI variant:** ask for the org UUID (Org Settings → Overview) and project UUID. Use the trust policy from §6b of `README.md`. Same `previewuse-ci-policy.json` as GitHub. Set the CircleCI context variables in step 8 instead of GitHub secrets.
+**CircleCI variant:** ask for the org UUID (Org Settings → Overview) and project UUID. Use `previewuse-ci-trust-circleci.json` from `$TMPL`, substituting `__ACCOUNT_ID__`, `__CIRCLE_ORG_ID__`, `__CIRCLE_PROJECT_ID__`. Same `previewuse-ci-policy.json` as GitHub. Set the CircleCI context variables in step 8 instead of GitHub secrets.
 
 ### 8. CI secrets
 
@@ -216,7 +240,7 @@ Update `PREVIEW_SETUP.md` (if `configure-preview-deploy` left one) to mark items
 
 - **Don't create the Route53 hosted zone.** Subdomain delegation usually needs NS records at the registrar — automating it leads to dangling zones the user can't reach.
 - **Don't write JSON policy files into the repo.** Use `mktemp -d` so policy files don't get committed.
-- **Don't widen IAM policies** beyond what `README.md` §6 specifies. The policy is intentionally scoped to the bucket prefix + zone ID — broadening it (`Resource: "*"` on S3, full `route53:*`) defeats the security model.
+- **Don't widen or rewrite the IAM policies.** Render them from the JSON templates in `.claude/skills/provision-preview-aws/templates/` by substituting placeholders only. Don't paraphrase the JSON, drop statements, or swap scoped resources for `"*"` — `deploy.sh` depends on the exact action set (e.g. `ec2:DescribeInstanceTypeOfferings`), and the resource scoping is the security model.
 - **Don't run `aws configure`** or write to `~/.aws/credentials`. If auth is missing, ask the user to set it up.
 - **Don't store the SSH private key in the repo.** `~/.ssh/<key-name>` only.
 - **Don't echo secret values.** `gh secret set --body "$VAR"` is fine; printing `$VAR` to the console is not.

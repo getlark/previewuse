@@ -68,6 +68,11 @@ FILES=(
   "github-actions.example.yml"
   ".claude/skills/configure-preview-deploy/SKILL.md"
   ".claude/skills/provision-preview-aws/SKILL.md"
+  ".claude/skills/provision-preview-aws/templates/preview-instance-trust.json"
+  ".claude/skills/provision-preview-aws/templates/preview-instance-policy.json"
+  ".claude/skills/provision-preview-aws/templates/previewuse-ci-trust-github.json"
+  ".claude/skills/provision-preview-aws/templates/previewuse-ci-trust-circleci.json"
+  ".claude/skills/provision-preview-aws/templates/previewuse-ci-policy.json"
 )
 
 EXECUTABLE=(

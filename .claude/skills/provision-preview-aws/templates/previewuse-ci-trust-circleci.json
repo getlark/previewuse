@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::__ACCOUNT_ID__:oidc-provider/oidc.circleci.com/org/__CIRCLE_ORG_ID__"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "oidc.circleci.com/org/__CIRCLE_ORG_ID__:aud": "__CIRCLE_ORG_ID__"
+      },
+      "StringLike": {
+        "oidc.circleci.com/org/__CIRCLE_ORG_ID__:sub": "org/__CIRCLE_ORG_ID__/project/__CIRCLE_PROJECT_ID__/*"
+      }
+    }
+  }]
+}

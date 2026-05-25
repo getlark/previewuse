@@ -1,0 +1,68 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EC2Read",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeImages",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstanceTypeOfferings",
+        "ec2:DescribeInstances"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EC2ManagePreviewInstances",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
+        "ec2:CreateTags"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "__AWS_REGION__" }
+      }
+    },
+    {
+      "Sid": "PassInstanceProfile",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::__ACCOUNT_ID__:role/__PREVIEW_IAM_PROFILE__",
+      "Condition": {
+        "StringEquals": { "iam:PassedToService": "ec2.amazonaws.com" }
+      }
+    },
+    {
+      "Sid": "S3PreviewBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::__BUCKET__/preview/*"
+    },
+    {
+      "Sid": "S3List",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::__BUCKET__"
+    },
+    {
+      "Sid": "Route53ListZones",
+      "Effect": "Allow",
+      "Action": "route53:ListHostedZonesByName",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Route53WritePreviewZone",
+      "Effect": "Allow",
+      "Action": "route53:ChangeResourceRecordSets",
+      "Resource": "arn:aws:route53:::hostedzone/__HOSTED_ZONE_ID__"
+    }
+  ]
+}
