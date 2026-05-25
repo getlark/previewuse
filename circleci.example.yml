@@ -1,0 +1,59 @@
+# Example CircleCI config.
+#
+# Wire the deploy job onto every non-main branch and the teardown onto closed
+# PRs. Make sure the role you assume has permission to:
+#   - launch / terminate EC2 instances
+#   - create / update Route53 records in your hosted zone
+#   - read/write the S3 bucket from PREVIEW_S3_BUCKET
+#
+# Required context / project env vars:
+#   PREVIEW_SSH_PRIVATE_KEY   (base64-encoded SSH private key)
+#   PREVIEW_KEY_NAME          (EC2 key pair name; or set in preview.config.sh)
+#   GITHUB_TOKEN              (optional, for PR label gating + PR comments)
+#   ...any secrets listed in PREVIEW_FORWARD_ENV
+
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@5.4.0
+
+jobs:
+  deploy_preview:
+    docker:
+      - image: cimg/aws:2025.01
+    resource_class: small
+    steps:
+      - checkout
+      - aws-cli/setup:
+          profile_name: default
+          role_arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/circleci
+      - run:
+          name: Deploy preview environment
+          no_output_timeout: 30m
+          command: bash scripts/deploy.sh "<< pipeline.git.branch >>"
+
+  teardown_preview:
+    docker:
+      - image: cimg/aws:2025.01
+    resource_class: small
+    steps:
+      - checkout
+      - aws-cli/setup:
+          profile_name: default
+          role_arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/circleci
+      - run:
+          name: Teardown preview environment
+          command: bash scripts/teardown.sh "<< pipeline.event.github.pull_request.head.ref >>"
+
+workflows:
+  deploy_preview_environment:
+    jobs:
+      - deploy_preview:
+          filters:
+            branches:
+              ignore: main
+
+  teardown_preview_environment:
+    when: pipeline.event.name == "pull_request" and pipeline.event.action == "closed"
+    jobs:
+      - teardown_preview

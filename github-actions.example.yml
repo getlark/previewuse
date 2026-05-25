@@ -1,0 +1,53 @@
+# Example GitHub Actions workflow. Save as .github/workflows/preview.yml.
+#
+# Uses OIDC to assume an AWS role — set AWS_ROLE_ARN in repo settings. Configure
+# the role with permissions to launch / terminate EC2, manage Route53 records
+# in your hosted zone, and read/write the S3 bucket from PREVIEW_S3_BUCKET.
+#
+# Required secrets:
+#   AWS_ROLE_ARN              (IAM role for OIDC)
+#   PREVIEW_SSH_PRIVATE_KEY   (base64-encoded SSH private key)
+#   PREVIEW_KEY_NAME          (EC2 key pair; or set in preview.config.sh)
+#   ...plus any secrets listed in PREVIEW_FORWARD_ENV
+
+name: Preview environments
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed, labeled]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Deploy preview
+        env:
+          PREVIEW_SSH_PRIVATE_KEY: ${{ secrets.PREVIEW_SSH_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Forward any secrets listed in PREVIEW_FORWARD_ENV here, e.g.
+          # STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: bash scripts/deploy.sh "${{ github.head_ref }}"
+
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Teardown preview
+        run: bash scripts/teardown.sh "${{ github.head_ref }}"

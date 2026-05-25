@@ -1,0 +1,78 @@
+# Example preview docker-compose.
+#
+# Copy/adapt this for your own app. Anything goes — as long as your compose
+# file ends with a Caddy service that publishes :80 and :443 and routes the
+# host env vars (DASHBOARD_HOST, API_HOST, ...) to your internal services, the
+# preview deploy machinery doesn't care what's in the rest.
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/app
+      REDIS_URL: redis://redis:6379
+      PUBLIC_URL: https://${API_HOST}
+      DASHBOARD_URL: https://${DASHBOARD_HOST}
+      # Forward any secrets your app needs — these come from PREVIEW_FORWARD_ENV
+      # STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_URL: https://${API_HOST}
+        VITE_PUBLIC_URL: https://${DASHBOARD_HOST}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DASHBOARD_HOST: ${DASHBOARD_HOST}
+      API_HOST: ${API_HOST}
+    depends_on:
+      - api
+      - dashboard
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
